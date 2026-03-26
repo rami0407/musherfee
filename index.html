@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة التقييم الذاتي وشهادات التقدير</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- dom-to-image for certificate download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
+    <!-- مكتبة المفرقعات (Confetti) -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+    <audio id="celebration-sound" src="https://actions.google.com/sounds/v1/crowds/kids_cheering.ogg" preload="auto"></audio>
+    <div class="page-background"></div>
+    <div class="container">
+        <!-- Survey Section -->
+        <main id="app-main" class="glass-panel slide-in">
+            <header class="app-header">
+                <div class="icon-wrapper">🎓</div>
+                <h1>مرحباً بك يا بطل</h1>
+                <p>التعلم في ظل هذه الظروف هو إنجاز بحد ذاته. نحن فخورون بك! أجب عن هذه الأسئلة البسيطة لنحتفي بجهودك.</p>
+            </header>
+            
+            <form id="evaluation-form">
+                <div class="form-group">
+                    <label for="student-name">1. ما هو اسمك الجميل؟</label>
+                    <input type="text" id="student-name" required placeholder="أدخل اسمك هنا...">
+                </div>
+
+                <div class="form-group">
+                    <label>2. ما هي نسبة حضورك للقاءات (Meet)؟</label>
+                    <div class="radio-group">
+                        <label class="radio-label"><input type="radio" name="q1" value="100" required> <span>الجميع (100%)</span></label>
+                        <label class="radio-label"><input type="radio" name="q1" value="75"> <span>الغالبية (75%)</span></label>
+                        <label class="radio-label"><input type="radio" name="q1" value="50"> <span>النصف تقريباً (50%)</span></label>
+                        <label class="radio-label"><input type="radio" name="q1" value="30"> <span>القليل (30%)</span></label>
+                        <label class="radio-label"><input type="radio" name="q1" value="0"> <span>ولا مرة (لظروف خارجة عن إرادتي)</span></label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>3. كم عدد المهمات التي قمت بحلها؟</label>
+                    <div class="radio-group">
+                        <label class="radio-label"><input type="radio" name="q2" value="100" required> <span>جميعها</span></label>
+                        <label class="radio-label"><input type="radio" name="q2" value="75"> <span>أغلبها</span></label>
+                        <label class="radio-label"><input type="radio" name="q2" value="50"> <span>بعضها</span></label>
+                        <label class="radio-label"><input type="radio" name="q2" value="30"> <span>القليل منها</span></label>
+                        <label class="radio-label"><input type="radio" name="q2" value="0"> <span>لم أتمكن من الحل</span></label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>4. ما مدى استفادتك من التعلم عن بعد وإنجاز المهمات؟</label>
+                    <div class="radio-group">
+                        <label class="radio-label"><input type="radio" name="q3" value="100" required> <span>استفدت كثيراً جداً</span></label>
+                        <label class="radio-label"><input type="radio" name="q3" value="75"> <span>استفدت بشكل جيد</span></label>
+                        <label class="radio-label"><input type="radio" name="q3" value="50"> <span>استفدت قليلاً</span></label>
+                        <label class="radio-label"><input type="radio" name="q3" value="0"> <span>لم أستفد كما يجب</span></label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>5. كيف تقيم مساهمتك ومشاركتك خلال التعلم؟</label>
+                    <div class="radio-group">
+                        <label class="radio-label"><input type="radio" name="q4" value="100" required> <span>كنت فعالاً ومشاركاً دائماً</span></label>
+                        <label class="radio-label"><input type="radio" name="q4" value="75"> <span>شاركت في بعض الأحيان</span></label>
+                        <label class="radio-label"><input type="radio" name="q4" value="50"> <span>كنت مستمعاً أغلب الوقت</span></label>
+                        <label class="radio-label"><input type="radio" name="q4" value="0"> <span>لم أستطع المشاركة</span></label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="self-eval">6. التقييم الذاتي: كيف تصف مجهودك بكلمة أو جملة قصيرة؟ (ستُكتب في الشهادة)</label>
+                    <input type="text" id="self-eval" required placeholder="مثال: فخور بمثابرتي، أو: بذلت جهدي رغم الظروف...">
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">
+                        <span class="btn-text">إصدار شهادة التقدير</span>
+                        <div class="loader hidden" id="submit-loader"></div>
+                    </button>
+                </div>
+            </form>
+        </main>
+
+        <!-- Certificate View Section (Hidden initially) -->
+        <section id="result-view" class="hidden glass-panel slide-up">
+            <div class="result-header">
+                <h2>مبارك لك إنجازك! 🎉</h2>
+                <p>لقد صممنا هذه الشهادة خصيصاً لك بناءً على تقييمك الذاتي الجميل.</p>
+                
+                <div class="action-buttons">
+                    <button id="btn-download" class="btn-secondary">⬇️ تحميل كصورة</button>
+                    <button id="btn-print" class="btn-secondary">🖨️ طباعة</button>
+                    <button id="btn-restart" class="btn-outline">↩️ تقييم جديد</button>
+                </div>
+            </div>
+
+            <div class="certificate-wrapper">
+                <div id="certificate" class="certificate">
+                    <div class="cert-border">
+                        <div class="cert-pattern"></div>
+                        <div class="cert-content">
+                            <div class="cert-top-header">
+                                <img src="logo.png" alt="شعار المدرسة" class="school-logo" onerror="this.style.opacity='0'">
+                                <h2>مدرسة مشيرفة الابتدائية</h2>
+                                <div class="school-logo-spacer" style="width: 80px;"></div>
+                            </div>
+                            <div class="cert-header">
+                                <h3>شهادة تقدير واعتزاز</h3>
+                                <div class="badge" id="cert-badge">🏅</div>
+                            </div>
+                            
+                            <div class="cert-body">
+                                <p class="cert-presented">تُمنَح هذه الشهادة بكل فخر واعتزاز إلى الطالب/ـة البطل/ـة:</p>
+                                <h1 class="student-name-display" id="cert-name">اسم الطالب</h1>
+                                
+                                <p class="cert-desc" id="cert-description">
+                                    تقديراً لجهوده(ا) المتميزة وإصراره(ا) على مواصلة التعلم والتميز رغم التحديات والظروف الاستثنائية التي نمر بها.
+                                </p>
+                                
+                                <p class="cert-tier" id="cert-tier-text">درجة التقييم: امتياز وتفوق</p>
+                                
+                                <div class="cert-quote-box">
+                                    <span class="quote-mark">"</span>
+                                    <p class="cert-quote" id="cert-student-quote">بذلت جهدي رغم الظروف</p>
+                                    <span class="quote-mark">"</span>
+                                </div>
+                            </div>
+                            
+                            <div class="cert-footer">
+                                <div class="signature-block">
+                                    <div class="sig-line"></div>
+                                    <p>التاريخ</p>
+                                    <p class="cert-date" id="cert-date">2026/03/26</p>
+                                </div>
+                                <div class="signature-block">
+                                    <div class="stamp">ختم التميز</div>
+                                </div>
+                                <div class="signature-block">
+                                    <div class="sig-line"></div>
+                                    <p>جهة التكريم</p>
+                                    <p class="cert-date" style="font-size:0.9rem;">معلمك الفخور</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    
+    <!-- Include JS file -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
