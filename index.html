@@ -13,9 +13,126 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
     <!-- مكتبة المفرقعات (Confetti) -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        .ai-settings-btn {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            font-size: 1.3rem;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            transition: background 0.2s;
+        }
+        .ai-settings-btn:hover { background: rgba(255,255,255,0.3); }
+        .ai-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        .ai-modal-overlay.active { display: flex; }
+        .ai-modal {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 420px;
+            width: 90%;
+            direction: rtl;
+            font-family: 'Tajawal', sans-serif;
+        }
+        .ai-modal h3 { margin: 0 0 0.5rem; color: #1e3a5f; font-size: 1.2rem; }
+        .ai-modal p { color: #666; font-size: 0.9rem; margin: 0 0 1rem; line-height: 1.6; }
+        .ai-modal input {
+            width: 100%;
+            padding: 0.7rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-family: monospace;
+            box-sizing: border-box;
+            margin-bottom: 1rem;
+            direction: ltr;
+        }
+        .ai-modal input:focus { outline: none; border-color: #2563eb; }
+        .ai-modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+        .ai-modal .btn-save {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.6rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            font-family: 'Tajawal', sans-serif;
+        }
+        .ai-modal .btn-cancel {
+            background: #f1f5f9;
+            color: #555;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            font-family: 'Tajawal', sans-serif;
+        }
+        .ai-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            padding: 3px 10px;
+            border-radius: 20px;
+            margin-top: 0.5rem;
+        }
+        .ai-status.active { background: #dcfce7; color: #166534; }
+        .ai-status.inactive { background: #fef9c3; color: #854d0e; }
+        .ai-badge {
+            position: fixed;
+            top: 16px;
+            left: 68px;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            font-family: 'Tajawal', sans-serif;
+        }
+    </style>
 </head>
 <body>
     <audio id="celebration-sound" src="https://actions.google.com/sounds/v1/crowds/kids_cheering.ogg" preload="auto"></audio>
+
+    <!-- زر إعدادات الذكاء الاصطناعي -->
+    <button class="ai-settings-btn" id="ai-settings-btn" title="إعدادات Claude AI">🤖</button>
+    <div class="ai-badge" id="ai-badge">⬜ بدون AI</div>
+
+    <!-- نافذة إدخال API Key -->
+    <div class="ai-modal-overlay" id="ai-modal-overlay">
+        <div class="ai-modal">
+            <h3>🤖 إعدادات Claude AI</h3>
+            <p>أدخل مفتاح Claude API الخاص بك لتوليد نصوص شهادات مخصصة وذكية لكل طالب. يُحفظ المفتاح في المتصفح فقط ولا يُرسل إلى أي خادم.</p>
+            <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." autocomplete="off">
+            <div id="ai-key-status"></div>
+            <div class="ai-modal-actions">
+                <button class="btn-cancel" id="ai-modal-cancel">إلغاء</button>
+                <button class="btn-save" id="ai-modal-save">حفظ المفتاح</button>
+            </div>
+        </div>
+    </div>
+
     <div class="page-background"></div>
     <div class="container">
         <!-- Survey Section -->

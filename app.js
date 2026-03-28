@@ -2,6 +2,82 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebas
 import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-analytics.js";
 import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
+// ========== Claude AI Integration ==========
+
+function getApiKey() {
+    return localStorage.getItem('claude_api_key') || '';
+}
+
+function updateAiBadge() {
+    const badge = document.getElementById('ai-badge');
+    if (!badge) return;
+    if (getApiKey()) {
+        badge.textContent = '✅ Claude AI مفعّل';
+        badge.style.background = 'rgba(22,163,74,0.25)';
+    } else {
+        badge.textContent = '⬜ بدون AI';
+        badge.style.background = 'rgba(255,255,255,0.15)';
+    }
+}
+
+async function generateAIDescription(studentName, score, selfEval, q1, q2, q3, q4) {
+    const apiKey = getApiKey();
+    if (!apiKey) return null;
+
+    const attendanceMap = { 100: 'حضر جميع اللقاءات', 75: 'حضر غالبية اللقاءات', 50: 'حضر نصف اللقاءات تقريباً', 30: 'حضر عدداً قليلاً من اللقاءات', 0: 'لم يتمكن من الحضور لظروف خارجة عن إرادته' };
+    const tasksMap = { 100: 'أنجز جميع المهام', 75: 'أنجز أغلب المهام', 50: 'أنجز بعض المهام', 30: 'أنجز القليل من المهام', 0: 'لم يتمكن من إنجاز المهام' };
+    const benefitMap = { 100: 'استفاد كثيراً جداً', 75: 'استفاد بشكل جيد', 50: 'استفاد قليلاً', 0: 'لم يستفد كما يجب' };
+    const participationMap = { 100: 'كان فعالاً ومشاركاً دائماً', 75: 'شارك في بعض الأحيان', 50: 'كان مستمعاً أغلب الوقت', 0: 'لم يستطع المشاركة' };
+
+    const prompt = `أنت مساعد تعليمي متخصص في كتابة نصوص شهادات تقدير للطلاب باللغة العربية الفصحى.
+
+اكتب نص شهادة تقدير مخصص وشخصي للطالب/ـة بناءً على المعلومات التالية:
+- اسم الطالب/ـة: ${studentName}
+- نسبة الحضور: ${attendanceMap[q1] || q1 + '%'}
+- إنجاز المهام: ${tasksMap[q2] || q2 + '%'}
+- مستوى الاستفادة: ${benefitMap[q3] || q3 + '%'}
+- المشاركة: ${participationMap[q4] || q4 + '%'}
+- التقييم الذاتي بكلماته: "${selfEval}"
+- الدرجة الإجمالية: ${score.toFixed(0)} من 100
+
+المطلوب: اكتب جملة واحدة أو جملتين فقط (لا أكثر من 40 كلمة) تناسب أن تُكتب في شهادة تقدير رسمية. يجب أن تكون:
+1. مشجعة وإيجابية حتى لو كانت الدرجة منخفضة
+2. مخصصة لهذا الطالب تحديداً بناءً على معطياته
+3. بأسلوب رسمي يليق بشهادة مدرسية
+4. تُشير بشكل غير مباشر لجهوده المحددة
+
+أعطني النص مباشرة بدون أي مقدمات أو شرح.`;
+
+    try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerous-direct-browser-access': 'true'
+            },
+            body: JSON.stringify({
+                model: 'claude-haiku-4-5-20251001',
+                max_tokens: 200,
+                messages: [{ role: 'user', content: prompt }]
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            console.error('Claude API error:', err);
+            return null;
+        }
+
+        const data = await response.json();
+        return data.content[0].text.trim();
+    } catch (e) {
+        console.error('Claude API fetch error:', e);
+        return null;
+    }
+}
+
 const firebaseConfig = {
   apiKey: "AIzaSyDTXNfWD_aFaLgIEt5fnbcQDp25mbN9Jfc",
   authDomain: "tkder-8bd96.firebaseapp.com",
@@ -17,6 +93,42 @@ const analytics = getAnalytics(app);
 const db = getFirestore(app);
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ===== إعداد نافذة Claude API Key =====
+    updateAiBadge();
+
+    const settingsBtn = document.getElementById('ai-settings-btn');
+    const modalOverlay = document.getElementById('ai-modal-overlay');
+    const modalCancel = document.getElementById('ai-modal-cancel');
+    const modalSave = document.getElementById('ai-modal-save');
+    const apiKeyInput = document.getElementById('api-key-input');
+    const keyStatus = document.getElementById('ai-key-status');
+
+    settingsBtn.addEventListener('click', () => {
+        apiKeyInput.value = getApiKey();
+        keyStatus.innerHTML = '';
+        modalOverlay.classList.add('active');
+    });
+    modalCancel.addEventListener('click', () => modalOverlay.classList.remove('active'));
+    modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) modalOverlay.classList.remove('active'); });
+
+    modalSave.addEventListener('click', () => {
+        const key = apiKeyInput.value.trim();
+        if (key && !key.startsWith('sk-ant-')) {
+            keyStatus.innerHTML = '<span style="color:#dc2626;font-size:0.85rem;">⚠️ المفتاح يبدو غير صحيح. يجب أن يبدأ بـ sk-ant-</span>';
+            return;
+        }
+        if (key) {
+            localStorage.setItem('claude_api_key', key);
+            keyStatus.innerHTML = '<span style="color:#16a34a;font-size:0.85rem;">✅ تم حفظ المفتاح بنجاح!</span>';
+        } else {
+            localStorage.removeItem('claude_api_key');
+            keyStatus.innerHTML = '<span style="color:#d97706;font-size:0.85rem;">🗑️ تم حذف المفتاح.</span>';
+        }
+        updateAiBadge();
+        setTimeout(() => modalOverlay.classList.remove('active'), 1000);
+    });
+
+    // ===== بداية كود الاستمارة =====
     const form = document.getElementById('evaluation-form');
     const mainSection = document.getElementById('app-main');
     const resultSection = document.getElementById('result-view');
@@ -60,30 +172,27 @@ document.addEventListener('DOMContentLoaded', () => {
         // Random Pick Helper
         const pickRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-        // Determine tier and messaging
+        // Determine tier
         let tierLabel = "";
-        let description = "";
         let badgeIcon = "";
         let tierColor = "";
+        let fallbackDescription = "";
 
         const excellentMessages = [
             "تقديراً لجهوده(ا) الاستثنائية وتفوقه(ا) الواضح وحرصه(ا) الشديد ومشاركته(ا) الفعالة في التعلم عن بعد، وتميزه(ا) الملحوظ.",
             "بكل فخر ومحبة نثمن هذا الأداء الرائع والتميز الملحوظ في متابعة الدروس والمهمات التعليمية، أداء يستحق الثناء والتقدير.",
             "تألق(ت) كالنجم الساطع في سماء منصتنا التعليمية! نشيد بالالتزام العالي والشغف الكبير للتعلم وإنجاز المهام على أكمل وجه."
         ];
-
         const goodMessages = [
             "تقديراً لالتزامه(ا) الطيب ومشاركته(ا) الفعالة وحرصه(ا) المتميز على مواصلة مسيرته(ا) التعليمية بهمة ونشاط.",
             "شكراً لجهودك الجميلة والمستمرة التي تثبت أنك(ِ) بطل(ة) حقيقي(ة) يسعى دائماً نحو الأفضل بخطوات ثابتة.",
             "مشاركة رائعة وجهد مبارك في متابعة التعلم عن بعد وإتمام المهام، ننتظر منك المزيد من الإبداع."
         ];
-
         const fairMessages = [
             "تقديراً لمحاولاته(ا) وجهوده(ا) المبذولة في متابعة التعلم، وإصراره(ا) على عدم الاستسلام. كل خطوة في طريق التعلم تستحق التقدير!",
             "الوصول إلى القمة يبدأ بخطوات واثقة، ونحن نقدر جداً كل دقيقة خصصتها للتعلم وإنجاز المهام، استمر في التقدم!",
             "نقدر هذه الهمة الطيبة في الحضور ومحاولة الحل رغم كافة الصعاب، نحن نؤمن بقدراتك الرائعة للمرحلة القادمة."
         ];
-
         const supportMessages = [
             "تقديراً لصموده(ا) وصبره(ا). نحن نعلم أن الظروف قد تكون قاسية وأنك تبذل ما بوسعك. نجاحك الأكبر هو سلامتك وعزيمتك.",
             "أنت بطل(ة) في نظرنا! غيابك أحياناً لا يقلل من قيمتك وحرصك. قلوبنا معك وندعمك في جميع الأوقات.",
@@ -92,24 +201,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (score >= 80) {
             tierLabel = "امتياز وتفوق عالي";
-            description = pickRandom(excellentMessages);
+            fallbackDescription = pickRandom(excellentMessages);
             badgeIcon = "🏆";
             tierColor = "#b45309";
         } else if (score >= 60) {
             tierLabel = "مشاركة فعالة ومتميزة";
-            description = pickRandom(goodMessages);
+            fallbackDescription = pickRandom(goodMessages);
             badgeIcon = "🎖️";
             tierColor = "#1d4ed8";
         } else if (score >= 35) {
             tierLabel = "مثابرة وجهد مشكور";
-            description = pickRandom(fairMessages);
+            fallbackDescription = pickRandom(fairMessages);
             badgeIcon = "⭐";
             tierColor = "#047857";
         } else {
             tierLabel = "قلوبنا معك - فخورون بك";
-            description = pickRandom(supportMessages);
+            fallbackDescription = pickRandom(supportMessages);
             badgeIcon = "❤️";
             tierColor = "#be123c";
+        }
+
+        // Try to get AI-generated description
+        let description = fallbackDescription;
+        if (getApiKey()) {
+            btnText.textContent = "يكتب Claude شهادتك...✨";
+            const aiText = await generateAIDescription(studentName, score, selfEval, q1, q2, q3, q4);
+            if (aiText) description = aiText;
         }
 
         // Log Event to Firebase Analytics
