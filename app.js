@@ -2,82 +2,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebas
 import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-analytics.js";
 import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
-// ========== Claude AI Integration ==========
-
-function getApiKey() {
-    return localStorage.getItem('claude_api_key') || '';
-}
-
-function updateAiBadge() {
-    const badge = document.getElementById('ai-badge');
-    if (!badge) return;
-    if (getApiKey()) {
-        badge.textContent = '✅ Claude AI مفعّل';
-        badge.style.background = 'rgba(22,163,74,0.25)';
-    } else {
-        badge.textContent = '⬜ بدون AI';
-        badge.style.background = 'rgba(255,255,255,0.15)';
-    }
-}
-
-async function generateAIDescription(studentName, score, selfEval, q1, q2, q3, q4) {
-    const apiKey = getApiKey();
-    if (!apiKey) return null;
-
-    const attendanceMap = { 100: 'حضر جميع اللقاءات', 75: 'حضر غالبية اللقاءات', 50: 'حضر نصف اللقاءات تقريباً', 30: 'حضر عدداً قليلاً من اللقاءات', 0: 'لم يتمكن من الحضور لظروف خارجة عن إرادته' };
-    const tasksMap = { 100: 'أنجز جميع المهام', 75: 'أنجز أغلب المهام', 50: 'أنجز بعض المهام', 30: 'أنجز القليل من المهام', 0: 'لم يتمكن من إنجاز المهام' };
-    const benefitMap = { 100: 'استفاد كثيراً جداً', 75: 'استفاد بشكل جيد', 50: 'استفاد قليلاً', 0: 'لم يستفد كما يجب' };
-    const participationMap = { 100: 'كان فعالاً ومشاركاً دائماً', 75: 'شارك في بعض الأحيان', 50: 'كان مستمعاً أغلب الوقت', 0: 'لم يستطع المشاركة' };
-
-    const prompt = `أنت مساعد تعليمي متخصص في كتابة نصوص شهادات تقدير للطلاب باللغة العربية الفصحى.
-
-اكتب نص شهادة تقدير مخصص وشخصي للطالب/ـة بناءً على المعلومات التالية:
-- اسم الطالب/ـة: ${studentName}
-- نسبة الحضور: ${attendanceMap[q1] || q1 + '%'}
-- إنجاز المهام: ${tasksMap[q2] || q2 + '%'}
-- مستوى الاستفادة: ${benefitMap[q3] || q3 + '%'}
-- المشاركة: ${participationMap[q4] || q4 + '%'}
-- التقييم الذاتي بكلماته: "${selfEval}"
-- الدرجة الإجمالية: ${score.toFixed(0)} من 100
-
-المطلوب: اكتب جملة واحدة أو جملتين فقط (لا أكثر من 40 كلمة) تناسب أن تُكتب في شهادة تقدير رسمية. يجب أن تكون:
-1. مشجعة وإيجابية حتى لو كانت الدرجة منخفضة
-2. مخصصة لهذا الطالب تحديداً بناءً على معطياته
-3. بأسلوب رسمي يليق بشهادة مدرسية
-4. تُشير بشكل غير مباشر لجهوده المحددة
-
-أعطني النص مباشرة بدون أي مقدمات أو شرح.`;
-
-    try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-                'anthropic-dangerous-direct-browser-access': 'true'
-            },
-            body: JSON.stringify({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 200,
-                messages: [{ role: 'user', content: prompt }]
-            })
-        });
-
-        if (!response.ok) {
-            const err = await response.json();
-            console.error('Claude API error:', err);
-            return null;
-        }
-
-        const data = await response.json();
-        return data.content[0].text.trim();
-    } catch (e) {
-        console.error('Claude API fetch error:', e);
-        return null;
-    }
-}
-
 const firebaseConfig = {
   apiKey: "AIzaSyDTXNfWD_aFaLgIEt5fnbcQDp25mbN9Jfc",
   authDomain: "tkder-8bd96.firebaseapp.com",
@@ -93,42 +17,6 @@ const analytics = getAnalytics(app);
 const db = getFirestore(app);
 
 document.addEventListener('DOMContentLoaded', () => {
-    // ===== إعداد نافذة Claude API Key =====
-    updateAiBadge();
-
-    const settingsBtn = document.getElementById('ai-settings-btn');
-    const modalOverlay = document.getElementById('ai-modal-overlay');
-    const modalCancel = document.getElementById('ai-modal-cancel');
-    const modalSave = document.getElementById('ai-modal-save');
-    const apiKeyInput = document.getElementById('api-key-input');
-    const keyStatus = document.getElementById('ai-key-status');
-
-    settingsBtn.addEventListener('click', () => {
-        apiKeyInput.value = getApiKey();
-        keyStatus.innerHTML = '';
-        modalOverlay.classList.add('active');
-    });
-    modalCancel.addEventListener('click', () => modalOverlay.classList.remove('active'));
-    modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) modalOverlay.classList.remove('active'); });
-
-    modalSave.addEventListener('click', () => {
-        const key = apiKeyInput.value.trim();
-        if (key && !key.startsWith('sk-ant-')) {
-            keyStatus.innerHTML = '<span style="color:#dc2626;font-size:0.85rem;">⚠️ المفتاح يبدو غير صحيح. يجب أن يبدأ بـ sk-ant-</span>';
-            return;
-        }
-        if (key) {
-            localStorage.setItem('claude_api_key', key);
-            keyStatus.innerHTML = '<span style="color:#16a34a;font-size:0.85rem;">✅ تم حفظ المفتاح بنجاح!</span>';
-        } else {
-            localStorage.removeItem('claude_api_key');
-            keyStatus.innerHTML = '<span style="color:#d97706;font-size:0.85rem;">🗑️ تم حذف المفتاح.</span>';
-        }
-        updateAiBadge();
-        setTimeout(() => modalOverlay.classList.remove('active'), 1000);
-    });
-
-    // ===== بداية كود الاستمارة =====
     const form = document.getElementById('evaluation-form');
     const mainSection = document.getElementById('app-main');
     const resultSection = document.getElementById('result-view');
@@ -149,6 +37,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const options = { year: 'numeric', month: 'long', day: 'numeric' };
     certDate.textContent = today.toLocaleDateString('ar-EG', options);
 
+    // Live gender-aware UI update
+    const welcomeTitle = document.getElementById('welcome-title');
+    const welcomeDesc = document.getElementById('welcome-desc');
+
+    document.querySelectorAll('input[name="gender"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            if (radio.value === 'female') {
+                welcomeTitle.textContent = 'مرحباً بكِ يا متميّزة';
+                welcomeDesc.textContent = 'التعلم في ظل هذه الظروف هو إنجاز بحد ذاته. نحن فخورون بكِ! أجيبي عن هذه الأسئلة البسيطة لنحتفي بجهودكِ.';
+            } else {
+                welcomeTitle.textContent = 'مرحباً بك يا متميّز';
+                welcomeDesc.textContent = 'التعلم في ظل هذه الظروف هو إنجاز بحد ذاته. نحن فخورون بك! أجب عن هذه الأسئلة البسيطة لنحتفي بجهودك.';
+            }
+        });
+    });
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -160,6 +64,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Gather Data
         const studentName = document.getElementById('student-name').value;
         const selfEval = document.getElementById('self-eval').value;
+        const genderInput = document.querySelector('input[name="gender"]:checked');
+        const gender = genderInput ? genderInput.value : 'male'; // default to male
+        const isFemale = gender === 'female';
         
         const q1 = parseInt(document.querySelector('input[name="q1"]:checked').value);
         const q2 = parseInt(document.querySelector('input[name="q2"]:checked').value);
@@ -172,61 +79,72 @@ document.addEventListener('DOMContentLoaded', () => {
         // Random Pick Helper
         const pickRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-        // Determine tier
+        // Determine tier and messaging
         let tierLabel = "";
+        let description = "";
         let badgeIcon = "";
         let tierColor = "";
-        let fallbackDescription = "";
 
-        const excellentMessages = [
-            "تقديراً لجهوده(ا) الاستثنائية وتفوقه(ا) الواضح وحرصه(ا) الشديد ومشاركته(ا) الفعالة في التعلم عن بعد، وتميزه(ا) الملحوظ.",
+        const excellentMessages = isFemale ? [
+            "تقديراً لجهودها الاستثنائية وتفوقها الواضح وحرصها الشديد ومشاركتها الفعالة في التعلم عن بعد، وتميزها الملحوظ.",
             "بكل فخر ومحبة نثمن هذا الأداء الرائع والتميز الملحوظ في متابعة الدروس والمهمات التعليمية، أداء يستحق الثناء والتقدير.",
-            "تألق(ت) كالنجم الساطع في سماء منصتنا التعليمية! نشيد بالالتزام العالي والشغف الكبير للتعلم وإنجاز المهام على أكمل وجه."
+            "تألقت كالنجمة الساطعة في سماء منصتنا التعليمية! نشيد بالتزامها العالي وشغفها الكبير للتعلم وإنجاز المهام على أكمل وجه."
+        ] : [
+            "تقديراً لجهوده الاستثنائية وتفوقه الواضح وحرصه الشديد ومشاركته الفعالة في التعلم عن بعد، وتميزه الملحوظ.",
+            "بكل فخر ومحبة نثمن هذا الأداء الرائع والتميز الملحوظ في متابعة الدروس والمهمات التعليمية، أداء يستحق الثناء والتقدير.",
+            "تألق كالنجم الساطع في سماء منصتنا التعليمية! نشيد بالتزامه العالي وشغفه الكبير للتعلم وإنجاز المهام على أكمل وجه."
         ];
-        const goodMessages = [
-            "تقديراً لالتزامه(ا) الطيب ومشاركته(ا) الفعالة وحرصه(ا) المتميز على مواصلة مسيرته(ا) التعليمية بهمة ونشاط.",
-            "شكراً لجهودك الجميلة والمستمرة التي تثبت أنك(ِ) بطل(ة) حقيقي(ة) يسعى دائماً نحو الأفضل بخطوات ثابتة.",
+
+        const goodMessages = isFemale ? [
+            "تقديراً لالتزامها الطيب ومشاركتها الفعالة وحرصها المتميز على مواصلة مسيرتها التعليمية بهمة ونشاط.",
+            "شكراً لجهودك الجميلة والمستمرة التي تثبت أنكِ متميّزة حقيقية تسعى دائماً نحو الأفضل بخطوات ثابتة.",
+            "مشاركة رائعة وجهد مبارك في متابعة التعلم عن بعد وإتمام المهام، ننتظر منكِ المزيد من الإبداع."
+        ] : [
+            "تقديراً لالتزامه الطيب ومشاركته الفعالة وحرصه المتميز على مواصلة مسيرته التعليمية بهمة ونشاط.",
+            "شكراً لجهودك الجميلة والمستمرة التي تثبت أنك متميّز حقيقي يسعى دائماً نحو الأفضل بخطوات ثابتة.",
             "مشاركة رائعة وجهد مبارك في متابعة التعلم عن بعد وإتمام المهام، ننتظر منك المزيد من الإبداع."
         ];
-        const fairMessages = [
-            "تقديراً لمحاولاته(ا) وجهوده(ا) المبذولة في متابعة التعلم، وإصراره(ا) على عدم الاستسلام. كل خطوة في طريق التعلم تستحق التقدير!",
+
+        const fairMessages = isFemale ? [
+            "تقديراً لمحاولاتها وجهودها المبذولة في متابعة التعلم، وإصرارها على عدم الاستسلام. كل خطوة في طريق التعلم تستحق التقدير!",
+            "الوصول إلى القمة يبدأ بخطوات واثقة، ونحن نقدر جداً كل دقيقة خصصتِها للتعلم وإنجاز المهام، استمري في التقدم!",
+            "نقدر هذه الهمة الطيبة في الحضور ومحاولة الحل رغم كافة الصعاب، نحن نؤمن بقدراتكِ الرائعة للمرحلة القادمة."
+        ] : [
+            "تقديراً لمحاولاته وجهوده المبذولة في متابعة التعلم، وإصراره على عدم الاستسلام. كل خطوة في طريق التعلم تستحق التقدير!",
             "الوصول إلى القمة يبدأ بخطوات واثقة، ونحن نقدر جداً كل دقيقة خصصتها للتعلم وإنجاز المهام، استمر في التقدم!",
             "نقدر هذه الهمة الطيبة في الحضور ومحاولة الحل رغم كافة الصعاب، نحن نؤمن بقدراتك الرائعة للمرحلة القادمة."
         ];
-        const supportMessages = [
-            "تقديراً لصموده(ا) وصبره(ا). نحن نعلم أن الظروف قد تكون قاسية وأنك تبذل ما بوسعك. نجاحك الأكبر هو سلامتك وعزيمتك.",
-            "أنت بطل(ة) في نظرنا! غيابك أحياناً لا يقلل من قيمتك وحرصك. قلوبنا معك وندعمك في جميع الأوقات.",
+
+        const supportMessages = isFemale ? [
+            "تقديراً لصمودها وصبرها. نحن نعلم أن الظروف قد تكون قاسية وأنكِ تبذلين ما بوسعكِ. نجاحك الأكبر هو سلامتكِ وعزيمتكِ.",
+            "أنتِ متميّزة في نظرنا! غيابكِ أحياناً لا يقلل من قيمتكِ وحرصكِ. قلوبنا معكِ وندعمكِ في جميع الأوقات.",
+            "المثابرة وسط التحديات هي أسمى درجات النجاح. نقّدر محاولاتكِ ونفخر بكِ دائماً وأبداً."
+        ] : [
+            "تقديراً لصموده وصبره. نحن نعلم أن الظروف قد تكون قاسية وأنك تبذل ما بوسعك. نجاحك الأكبر هو سلامتك وعزيمتك.",
+            "أنت متميّز في نظرنا! غيابك أحياناً لا يقلل من قيمتك وحرصك. قلوبنا معك وندعمك في جميع الأوقات.",
             "المثابرة وسط التحديات هي أسمى درجات النجاح. نقّدر محاولاتك ونفخر بك دائماً وأبداً."
         ];
 
         if (score >= 80) {
             tierLabel = "امتياز وتفوق عالي";
-            fallbackDescription = pickRandom(excellentMessages);
+            description = pickRandom(excellentMessages);
             badgeIcon = "🏆";
             tierColor = "#b45309";
         } else if (score >= 60) {
             tierLabel = "مشاركة فعالة ومتميزة";
-            fallbackDescription = pickRandom(goodMessages);
+            description = pickRandom(goodMessages);
             badgeIcon = "🎖️";
             tierColor = "#1d4ed8";
         } else if (score >= 35) {
             tierLabel = "مثابرة وجهد مشكور";
-            fallbackDescription = pickRandom(fairMessages);
+            description = pickRandom(fairMessages);
             badgeIcon = "⭐";
             tierColor = "#047857";
         } else {
             tierLabel = "قلوبنا معك - فخورون بك";
-            fallbackDescription = pickRandom(supportMessages);
+            description = pickRandom(supportMessages);
             badgeIcon = "❤️";
             tierColor = "#be123c";
-        }
-
-        // Try to get AI-generated description
-        let description = fallbackDescription;
-        if (getApiKey()) {
-            btnText.textContent = "يكتب Claude شهادتك...✨";
-            const aiText = await generateAIDescription(studentName, score, selfEval, q1, q2, q3, q4);
-            if (aiText) description = aiText;
         }
 
         // Log Event to Firebase Analytics
@@ -257,6 +175,24 @@ document.addEventListener('DOMContentLoaded', () => {
         certTierText.style.color = tierColor;
         certReason.textContent = description;
         certBadge.textContent = badgeIcon;
+
+        // Update gender-sensitive static text
+        const certPresentedText = document.getElementById('cert-presented-text');
+        const certTeacherLabel = document.getElementById('cert-teacher-label');
+        const resultCongrats   = document.getElementById('result-congrats');
+        const resultSubtitle   = document.getElementById('result-subtitle');
+
+        if (isFemale) {
+            certPresentedText.textContent = 'تُمنَح هذه الشهادة بكل فخر واعتزاز إلى الطالبة المتميّزة:';
+            certTeacherLabel.textContent  = 'معلمتك الفخورة';
+            resultCongrats.textContent    = 'مبارك لكِ إنجازك! 🎉';
+            resultSubtitle.textContent    = 'لقد صممنا هذه الشهادة خصيصاً لكِ بناءً على تقييمك الذاتي الجميل.';
+        } else {
+            certPresentedText.textContent = 'تُمنَح هذه الشهادة بكل فخر واعتزاز إلى الطالب المتميّز:';
+            certTeacherLabel.textContent  = 'معلمك الفخور';
+            resultCongrats.textContent    = 'مبارك لك إنجازك! 🎉';
+            resultSubtitle.textContent    = 'لقد صممنا هذه الشهادة خصيصاً لك بناءً على تقييمك الذاتي الجميل.';
+        }
 
         // Simulate network/generation time for better UX
         setTimeout(() => {
@@ -305,37 +241,124 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1500);
     });
 
-    // Download Certificate functionality using dom-to-image
-    document.getElementById('btn-download').addEventListener('click', () => {
-        const certElement = document.getElementById('certificate');
-        const downloadBtn = document.getElementById('btn-download');
-        
-        // Temporarily change button text
-        const originalText = downloadBtn.innerHTML;
-        downloadBtn.innerHTML = "⏳ جاري التجهيز...";
-        downloadBtn.disabled = true;
-        
-        // Important: When scaling is applied via CSS zoom (for small screens), 
-        // dom-to-image might capture it small. It's usually better at 100% scale.
-        // We ensure a good resolution output by adjusting properties if needed, 
-        // but here standard dom-to-image toJpeg works well.
-        domtoimage.toJpeg(certElement, { quality: 0.95, bgcolor: '#ffffff' })
-            .then(function (dataUrl) {
-                const link = document.createElement('a');
-                link.download = `شهادة_تقدير_${document.getElementById('student-name').value}.jpg`;
-                link.href = dataUrl;
-                link.click();
-                
-                // Reset button
-                downloadBtn.innerHTML = originalText;
-                downloadBtn.disabled = false;
-            })
-            .catch(function (error) {
-                console.error('oops, something went wrong!', error);
-                alert("عذراً، حدث خطأ أثناء تحميل الصورة. يرجى محاولة الطباعة بدلاً من ذلك.");
-                downloadBtn.innerHTML = originalText;
-                downloadBtn.disabled = false;
-            });
+    // ─── Shared: render certificate to a high-res canvas ───────────────────────
+    function generateCertificateImage() {
+        return new Promise((resolve, reject) => {
+            const certElement = document.getElementById('certificate');
+            const certWrapper  = document.querySelector('.certificate-wrapper');
+
+            // Strip zoom so html2canvas captures the real size
+            const prevZoom = certWrapper.style.zoom;
+            certWrapper.style.zoom = '1';
+
+            setTimeout(() => {
+                html2canvas(certElement, {
+                    scale: 3,           // high-res for social media
+                    useCORS: true,
+                    allowTaint: true,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    width:  certElement.offsetWidth,
+                    height: certElement.offsetHeight
+                }).then(canvas => {
+                    certWrapper.style.zoom = prevZoom;
+                    resolve(canvas);
+                }).catch(err => {
+                    certWrapper.style.zoom = prevZoom;
+                    reject(err);
+                });
+            }, 150);
+        });
+    }
+
+    function setButtonLoading(btn, loadingText) {
+        const original = btn.innerHTML;
+        btn.innerHTML  = loadingText;
+        btn.disabled   = true;
+        return () => { btn.innerHTML = original; btn.disabled = false; };
+    }
+
+    // ─── Download ────────────────────────────────────────────────────────────────
+    document.getElementById('btn-download').addEventListener('click', async () => {
+        const btn    = document.getElementById('btn-download');
+        const restore = setButtonLoading(btn, '⏳ جاري التجهيز...');
+        try {
+            const canvas = await generateCertificateImage();
+            const studentName = document.getElementById('student-name').value || 'الطالب';
+            const link = document.createElement('a');
+            link.download = `شهادة_تقدير_${studentName}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        } catch (err) {
+            console.error('خطأ في التنزيل:', err);
+            alert('عذراً، حدث خطأ أثناء تحميل الصورة.');
+        } finally {
+            restore();
+        }
+    });
+
+    // ─── Share (Web Share API) ────────────────────────────────────────────────────
+    document.getElementById('btn-share').addEventListener('click', async () => {
+        const btn      = document.getElementById('btn-share');
+        const restore  = setButtonLoading(btn, '⏳ جاري التجهيز...');
+        const studentName = document.getElementById('student-name').value || 'الطالب';
+        try {
+            const canvas = await generateCertificateImage();
+            canvas.toBlob(async (blob) => {
+                const file = new File([blob], `شهادة_تقدير_${studentName}.png`, { type: 'image/png' });
+                if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        title: 'شهادة تقدير واعتزاز 🏅',
+                        text: `أنا ${studentName} حصلت على شهادة تقدير من مدرسة مشيرفة الابتدائية! 🎉`,
+                        files: [file]
+                    });
+                } else {
+                    // Fallback: download the image so the user can share manually
+                    const link = document.createElement('a');
+                    link.download = `شهادة_تقدير_${studentName}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                    alert('تم تحميل الشهادة! يمكنك الآن مشاركتها يدوياً على واتساب أو فيسبوك.');
+                }
+                restore();
+            }, 'image/png');
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('خطأ في المشاركة:', err);
+                alert('عذراً، حدث خطأ أثناء المشاركة.');
+            }
+            restore();
+        }
+    });
+
+    // ─── Copy to Clipboard ────────────────────────────────────────────────────────
+    document.getElementById('btn-copy').addEventListener('click', async () => {
+        const btn    = document.getElementById('btn-copy');
+        const restore = setButtonLoading(btn, '⏳ جاري النسخ...');
+        try {
+            const canvas = await generateCertificateImage();
+            canvas.toBlob(async (blob) => {
+                try {
+                    await navigator.clipboard.write([
+                        new ClipboardItem({ 'image/png': blob })
+                    ]);
+                    btn.innerHTML = '✅ تم النسخ!';
+                    setTimeout(restore, 2000);
+                } catch (e) {
+                    // Clipboard API not supported; fallback to download
+                    const studentName = document.getElementById('student-name').value || 'الطالب';
+                    const link = document.createElement('a');
+                    link.download = `شهادة_تقدير_${studentName}.png`;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+                    alert('متصفحك لا يدعم النسخ المباشر. تم تحميل الصورة بدلاً من ذلك.');
+                    restore();
+                }
+            }, 'image/png');
+        } catch (err) {
+            console.error('خطأ في النسخ:', err);
+            restore();
+        }
     });
 
     // Print Certificate
