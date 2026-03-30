@@ -1,7 +1,3 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-import { getAnalytics, logEvent } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-analytics.js";
-import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
-
 const firebaseConfig = {
   apiKey: "AIzaSyDTXNfWD_aFaLgIEt5fnbcQDp25mbN9Jfc",
   authDomain: "tkder-8bd96.firebaseapp.com",
@@ -12,9 +8,14 @@ const firebaseConfig = {
   measurementId: "G-3CKMYNQ2V1"
 };
 
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-const db = getFirestore(app);
+firebase.initializeApp(firebaseConfig);
+let analytics;
+try {
+    analytics = firebase.analytics();
+} catch (e) {
+    console.warn("Analytics not supported or disabled:", e);
+}
+const db = firebase.firestore();
 
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('evaluation-form');
@@ -148,20 +149,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Log Event to Firebase Analytics
-        logEvent(analytics, 'generate_certificate', {
-            tier: tierLabel,
-            score: score
-        });
+        try {
+            if (analytics) {
+                firebase.analytics().logEvent('generate_certificate', {
+                    tier: tierLabel,
+                    score: score
+                });
+            }
+        } catch (e) {
+            console.warn("Analytics log error:", e);
+        }
 
         // Save data to Firestore Database
         try {
-            await addDoc(collection(db, "certificates"), {
+            await db.collection("certificates").add({
                 studentName: studentName,
                 selfEvaluation: selfEval,
                 answers: { q1, q2, q3, q4 },
                 score: score,
                 tier: tierLabel,
-                timestamp: serverTimestamp()
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
             console.log("Student data successfully saved to Firebase!");
         } catch (error) {
@@ -255,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 html2canvas(certElement, {
                     scale: 3,           // high-res for social media
                     useCORS: true,
-                    allowTaint: true,
+                    allowTaint: false,
                     backgroundColor: '#ffffff',
                     logging: false,
                     width:  certElement.offsetWidth,
